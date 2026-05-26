@@ -16,8 +16,10 @@ When you type `/ex-skill` in Claude Code, it:
 
 1. **Scans** three sources:
    - `~/.claude/skills/` and `./.claude/skills/` (user + project)
-   - `~/.claude/plugins/installed_plugins.json`
+   - `~/.claude/plugins/installed_plugins.json` (user only — Claude Code plugins are user-scoped by design)
    - `~/.claude/commands/` and `./.claude/commands/` (user + project)
+
+   > Project scope is skipped when the cwd is your home directory (to avoid scanning the same files twice).
 2. **Renders** a unified, color-coded ASCII table with index numbers
 3. **Asks** what you want to do: delete some, clear all, or cancel
 4. **Confirms** with a dry-run preview before any file is touched

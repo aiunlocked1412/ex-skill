@@ -1,12 +1,23 @@
 #!/usr/bin/env bash
 # ex-skill-scan.sh — scan installed skills, plugins, slash commands
-# Output: pretty ASCII box + machine-readable index file at /tmp/ex-skill-index.tsv
+# Output: pretty ASCII box + machine-readable index file at $EX_SKILL_INDEX
 # TSV columns: idx<TAB>kind<TAB>name<TAB>scope<TAB>path<TAB>extra
 #   kind  = skill | plugin | command
 #   scope = user | project
 #   extra = type (folder/symlink) for skills, version for plugins, "" for commands
 
 set -u
+
+# ── index file location ─────────────────────────────────────────────────────
+# Default: ~/.claude/cache/ex-skill-index.tsv (per-user, persistent, no /tmp races
+# or info-disclosure on multi-user systems). Override with $EX_SKILL_INDEX.
+INDEX="${EX_SKILL_INDEX:-$HOME/.claude/cache/ex-skill-index.tsv}"
+mkdir -p "$(dirname "$INDEX")"
+: > "$INDEX"
+
+# Resolve python interpreter once (prefer $PATH, fall back to /usr/bin/python3)
+PYTHON="$(command -v python3 || true)"
+[[ -z "$PYTHON" && -x /usr/bin/python3 ]] && PYTHON=/usr/bin/python3
 
 # ── colors ──────────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -23,11 +34,7 @@ else
   C_RESET= C_BOLD= C_DIM= C_CYAN= C_MAGENTA= C_YELLOW= C_GREEN= C_BLUE= C_GREY=
 fi
 
-INDEX=/tmp/ex-skill-index.tsv
-: > "$INDEX"
-
-USER_HOME="${HOME}"
-USER_CLAUDE="${USER_HOME}/.claude"
+USER_CLAUDE="$HOME/.claude"
 PROJECT_CLAUDE="$(pwd)/.claude"
 
 idx=0
@@ -51,23 +58,46 @@ trunc() {
   fi
 }
 
+# Visual width (treat each emoji as 2 cells; ANSI codes as 0)
+# We approximate by stripping ANSI then counting one-per-emoji extra cell.
+# Emojis used in this script: 📦 ✨ 🔌 ⚡ 📊
+visual_width() {
+  local s=$1
+  s=$(printf '%b' "$s" | sed -E $'s/\033\\[[0-9;]*m//g')
+  local n=${#s}
+  # add +1 for every emoji that renders as 2 cells but counts as 1 char in bash
+  local emoji
+  for emoji in '📦' '✨' '🔌' '⚡' '📊' '⚠️'; do
+    local rest=$s extra=0
+    while [[ "$rest" == *"$emoji"* ]]; do
+      extra=$((extra + 1))
+      rest=${rest#*"$emoji"}
+    done
+    n=$((n + extra))
+  done
+  echo "$n"
+}
+
+BOX_WIDTH=63   # interior width (between │ and │)
 print_box_top() {
-  printf '%s╭───────────────────────────────────────────────────────────────╮%s\n' "$C_CYAN" "$C_RESET"
-  printf '%s│%s  %s📦 INSTALLED SKILLS / PLUGINS / COMMANDS%s                    %s│%s\n' "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_RESET" "$C_CYAN" "$C_RESET"
-  printf '%s├───────────────────────────────────────────────────────────────┤%s\n' "$C_CYAN" "$C_RESET"
+  local rule="" i
+  for ((i=0; i<BOX_WIDTH; i++)); do rule+="─"; done
+  printf '%s╭%s╮%s\n' "$C_CYAN" "$rule" "$C_RESET"
 }
 print_box_bottom() {
-  printf '%s╰───────────────────────────────────────────────────────────────╯%s\n' "$C_CYAN" "$C_RESET"
+  local rule="" i
+  for ((i=0; i<BOX_WIDTH; i++)); do rule+="─"; done
+  printf '%s╰%s╯%s\n' "$C_CYAN" "$rule" "$C_RESET"
 }
 print_box_sep() {
-  printf '%s├───────────────────────────────────────────────────────────────┤%s\n' "$C_CYAN" "$C_RESET"
+  local rule="" i
+  for ((i=0; i<BOX_WIDTH; i++)); do rule+="─"; done
+  printf '%s├%s┤%s\n' "$C_CYAN" "$rule" "$C_RESET"
 }
 print_box_line() {
-  # print a content line, pad to fixed width 61
-  local raw=$1 color=${2:-}
-  # strip color codes for width calc
-  local plain=$(printf '%b' "$raw" | sed -E $'s/\033\\[[0-9;]*m//g')
-  local pad=$((61 - ${#plain}))
+  local raw=$1
+  local w; w=$(visual_width "$raw")
+  local pad=$((BOX_WIDTH - 1 - w))   # -1 for the leading space we always print
   (( pad < 0 )) && pad=0
   printf '%s│%s %b%*s%s│%s\n' "$C_CYAN" "$C_RESET" "$raw" "$pad" "" "$C_CYAN" "$C_RESET"
 }
@@ -79,7 +109,7 @@ scan_skills_in() {
   [[ -d "$root" ]] || return
   shopt -s nullglob
   for entry in "$root"/*; do
-    local name=$(basename "$entry")
+    local name; name=$(basename "$entry")
     local type
     if [[ -L "$entry" ]]; then
       type="symlink"
@@ -97,29 +127,33 @@ scan_skills_in() {
   shopt -u nullglob
 }
 scan_skills_in "$USER_CLAUDE/skills" "user"
-scan_skills_in "$PROJECT_CLAUDE/skills" "project"
+# Skip project scope if cwd is HOME (PROJECT_CLAUDE would == USER_CLAUDE → duplicates)
+if [[ "$PROJECT_CLAUDE" != "$USER_CLAUDE" ]]; then
+  scan_skills_in "$PROJECT_CLAUDE/skills" "project"
+fi
 
 # ── 2. Plugins ──────────────────────────────────────────────────────────────
 declare -a PLUGIN_ROWS=()
 plugins_json="$USER_CLAUDE/plugins/installed_plugins.json"
-if [[ -f "$plugins_json" ]]; then
-  # Parse with python (always available on macOS)
-  while IFS=$'\t' read -r pname pver ppath; do
+if [[ -f "$plugins_json" && -n "$PYTHON" ]]; then
+  # Parse with python; emit name<TAB>version<TAB>installPath<TAB>scope
+  while IFS=$'\t' read -r pname pver ppath pscope; do
     [[ -z "$pname" ]] && continue
-    add_row "plugin" "$pname" "user" "$ppath" "$pver"
-    PLUGIN_ROWS+=("$LAST_IDX|$pname|user|$pver")
-  done < <(/usr/bin/python3 -c '
+    [[ -z "$pscope" ]] && pscope="user"
+    add_row "plugin" "$pname" "$pscope" "$ppath" "$pver"
+    PLUGIN_ROWS+=("$LAST_IDX|$pname|$pscope|$pver")
+  done < <("$PYTHON" -c '
 import json, sys
 try:
     with open(sys.argv[1]) as f:
         data = json.load(f)
     for key, entries in (data.get("plugins") or {}).items():
-        # key looks like "boxbox@marketplace"
         name = key.split("@", 1)[0]
         for e in entries:
-            ver = e.get("version", "unknown")
-            path = e.get("installPath", "")
-            print(f"{name}\t{ver}\t{path}")
+            ver   = e.get("version") or "unknown"
+            path  = e.get("installPath", "")
+            scope = e.get("scope", "user")
+            print(f"{name}\t{ver}\t{path}\t{scope}")
 except Exception as ex:
     sys.stderr.write(str(ex) + "\n")
 ' "$plugins_json")
@@ -132,17 +166,21 @@ scan_cmds_in() {
   [[ -d "$root" ]] || return
   shopt -s nullglob
   for f in "$root"/*.md; do
-    local name=$(basename "$f" .md)
+    local name; name=$(basename "$f" .md)
     add_row "command" "$name" "$scope" "$f" ""
     CMD_ROWS+=("$LAST_IDX|$name|$scope")
   done
   shopt -u nullglob
 }
 scan_cmds_in "$USER_CLAUDE/commands" "user"
-scan_cmds_in "$PROJECT_CLAUDE/commands" "project"
+if [[ "$PROJECT_CLAUDE" != "$USER_CLAUDE" ]]; then
+  scan_cmds_in "$PROJECT_CLAUDE/commands" "project"
+fi
 
 # ── render ──────────────────────────────────────────────────────────────────
 print_box_top
+print_box_line "$(printf '%s📦 INSTALLED SKILLS / PLUGINS / COMMANDS%s' "$C_BOLD" "$C_RESET")"
+print_box_sep
 
 # SKILLS section
 print_box_line "$(printf '%s✨ SKILLS (%d)%s' "$C_MAGENTA$C_BOLD" "${#SKILL_ROWS[@]}" "$C_RESET")"
@@ -170,10 +208,16 @@ else
   for row in "${PLUGIN_ROWS[@]}"; do
     IFS='|' read -r i n s v <<< "$row"
     name_p=$(trunc "$n" 30)
-    print_box_line "$(printf ' %s%3d.%s %-30s %sv%s%s' \
+    if [[ -z "$v" || "$v" == "unknown" ]]; then
+      ver_disp="?"
+    else
+      ver_disp="v$v"
+    fi
+    print_box_line "$(printf ' %s%3d.%s %-30s %s%s%s %s%s%s' \
       "$C_YELLOW" "$i" "$C_RESET" \
       "$name_p" \
-      "$C_DIM" "$v" "$C_RESET")"
+      "$C_DIM" "$ver_disp" "$C_RESET" \
+      "$C_GREY" "$s" "$C_RESET")"
   done
 fi
 
@@ -198,6 +242,6 @@ fi
 print_box_bottom
 
 total=$((${#SKILL_ROWS[@]} + ${#PLUGIN_ROWS[@]} + ${#CMD_ROWS[@]}))
-printf '\n%s📊 Total: %d items%s   %sIndex saved to %s%s\n\n' \
+printf '\n%s📊 Total: %d items%s   %sIndex: %s%s\n\n' \
   "$C_BOLD" "$total" "$C_RESET" \
   "$C_DIM" "$INDEX" "$C_RESET"

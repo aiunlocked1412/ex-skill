@@ -16,8 +16,10 @@ Slash command ตัวเล็ก ๆ สำหรับ **[Claude Code](https
 
 1. **Scan** 3 แหล่ง:
    - `~/.claude/skills/` และ `./.claude/skills/` (user + project scope)
-   - `~/.claude/plugins/installed_plugins.json`
+   - `~/.claude/plugins/installed_plugins.json` (เฉพาะ user — Claude Code plugins เป็น user-scope เสมอ)
    - `~/.claude/commands/` และ `./.claude/commands/`
+
+   > ถ้า cwd = home directory จะข้าม project scope (ไม่สแกนซ้ำ)
 2. **แสดง** ตาราง ASCII มีสี + เลข index กำกับทุกบรรทัด
 3. **ถาม** ว่าต้องการทำอะไร: ลบบางรายการ / เคลียร์ทั้งหมด / ยกเลิก
 4. **Preview** แบบ dry-run ก่อนแตะไฟล์จริงเสมอ

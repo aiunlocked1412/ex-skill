@@ -61,7 +61,11 @@ for pair in "${PAIRS[@]}"; do
   fi
 done
 
-chmod +x "$DEST/ex-skill-scan.sh" "$DEST/ex-skill-delete.sh"
+# In symlink mode the dest is a symlink to the source — chmod the source
+# (which is already +x in the repo). In copy mode chmod the dest copies.
+if [[ "$MODE" == "copy" ]]; then
+  chmod +x "$DEST/ex-skill-scan.sh" "$DEST/ex-skill-delete.sh"
+fi
 
 echo
 echo "✅ Done. Open Claude Code and type /ex-skill to use it."
