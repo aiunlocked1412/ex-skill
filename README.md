@@ -50,6 +50,19 @@ When you type `/ex-skill` in Claude Code, it:
 
 ## Install
 
+### Option A — Plugin marketplace (recommended)
+
+Inside Claude Code, run:
+
+```
+/plugin marketplace add aiunlocked1412/ex-skill
+/plugin install ex-skill@ex-skill-marketplace
+```
+
+That's it — `/ex-skill` is immediately available, and you can uninstall later with `/plugin uninstall ex-skill@ex-skill-marketplace`.
+
+### Option B — Standalone install (no marketplace)
+
 ```bash
 git clone https://github.com/aiunlocked1412/ex-skill.git
 cd ex-skill
@@ -58,16 +71,18 @@ cd ex-skill
 ./install.sh --link      # symlink mode — edits in repo affect installed copy
 ```
 
-Then open Claude Code and type:
-
-```
-/ex-skill
-```
+Then open Claude Code and type `/ex-skill`.
 
 If a file with the same name already exists in `~/.claude/commands/`, it's backed up to `*.bak` instead of overwritten.
 
 ## Uninstall
 
+If installed via marketplace:
+```
+/plugin uninstall ex-skill@ex-skill-marketplace
+```
+
+If installed via `install.sh`:
 ```bash
 ./uninstall.sh
 ```
@@ -78,13 +93,15 @@ If a file with the same name already exists in `~/.claude/commands/`, it's backe
 
 ## How it works
 
-Three files installed into `~/.claude/commands/`:
+Three pieces:
 
 | File | Role |
 |---|---|
-| `ex-skill.md` | Slash command entry — orchestrates the flow with Claude's `AskUserQuestion` |
-| `ex-skill-scan.sh` | Pure bash scanner — prints the ASCII box and writes `/tmp/ex-skill-index.tsv` |
-| `ex-skill-delete.sh` | Deletion engine — accepts `"1,3,5"`, `"all"`, or `--dry` |
+| `commands/ex-skill.md` | Slash command entry — orchestrates the flow with Claude's `AskUserQuestion` |
+| `scripts/ex-skill-scan.sh` | Pure bash scanner — prints the ASCII box and writes `/tmp/ex-skill-index.tsv` |
+| `scripts/ex-skill-delete.sh` | Deletion engine — accepts `"1,3,5"`, `"all"`, or `--dry` |
+
+The slash command uses a smart path resolver — `${CLAUDE_PLUGIN_ROOT}` when installed via marketplace, `~/.claude/commands/` when installed standalone — so the same file works for both install methods.
 
 The scanner emits a tab-separated index file so the deletion script can operate on stable numeric IDs even if the user scrolls past the box.
 
@@ -117,11 +134,15 @@ The scanner emits a tab-separated index file so the deletion script can operate 
 
 ```
 ex-skill/
+├── .claude-plugin/
+│   ├── marketplace.json     # marketplace manifest
+│   └── plugin.json          # plugin manifest
 ├── commands/
-│   ├── ex-skill.md          # slash command
+│   └── ex-skill.md          # slash command (with smart path resolver)
+├── scripts/
 │   ├── ex-skill-scan.sh     # scanner
 │   └── ex-skill-delete.sh   # deleter
-├── install.sh
+├── install.sh               # standalone install
 ├── uninstall.sh
 ├── LICENSE                  # MIT
 └── README.md / README.th.md

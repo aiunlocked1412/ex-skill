@@ -1,0 +1,26 @@
+{
+  "name": "ex-skill-marketplace",
+  "owner": {
+    "name": "AI UNLOCKED",
+    "email": "aiunlocked1412@gmail.com",
+    "url": "https://github.com/aiunlocked1412"
+  },
+  "plugins": [
+    {
+      "name": "ex-skill",
+      "source": "./",
+      "description": "Scan and manage installed Claude Code skills, plugins, and slash commands — interactively delete them from the CLI.",
+      "version": "0.1.0",
+      "category": "utility",
+      "tags": [
+        "skill-manager",
+        "plugin-manager",
+        "cleanup",
+        "uninstall",
+        "cli",
+        "interactive",
+        "claude-code"
+      ]
+    }
+  ]
+}

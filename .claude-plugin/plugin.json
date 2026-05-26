@@ -1,0 +1,21 @@
+{
+  "name": "ex-skill",
+  "version": "0.1.0",
+  "description": "Type /ex-skill to scan every installed skill, plugin, and slash command on your machine — see them in a colorful ASCII table and delete the ones you want, all from the CLI.",
+  "author": {
+    "name": "AI UNLOCKED",
+    "email": "aiunlocked1412@gmail.com",
+    "url": "https://github.com/aiunlocked1412"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/aiunlocked1412/ex-skill",
+  "repository": "https://github.com/aiunlocked1412/ex-skill",
+  "keywords": [
+    "skill-manager",
+    "plugin-manager",
+    "uninstall",
+    "cleanup",
+    "interactive-cli",
+    "utility"
+  ]
+}

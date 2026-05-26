@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# install.sh — install /ex-skill into ~/.claude/commands/
-# Copies the 3 files (or symlinks them with --link) so /ex-skill is usable in Claude Code.
+# install.sh — standalone install of /ex-skill into ~/.claude/commands/
+#
+# Alternatively, install via the Claude Code plugin marketplace:
+#   /plugin marketplace add aiunlocked1412/ex-skill
+#   /plugin install ex-skill@ex-skill-marketplace
+#
+# This script is for users who don't want to use the plugin marketplace.
+# It copies (or symlinks with --link) ex-skill.md + scripts into ~/.claude/commands/
+# so that /ex-skill works in Claude Code.
 
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC="$REPO_DIR/commands"
 DEST="$HOME/.claude/commands"
 
 MODE="copy"
@@ -19,25 +25,39 @@ if [[ ! -d "$DEST" ]]; then
 fi
 
 echo "📦 Installing /ex-skill ($MODE mode)..."
-echo "   from: $SRC"
+echo "   from: $REPO_DIR"
 echo "   to:   $DEST"
 echo
 
-for f in ex-skill.md ex-skill-scan.sh ex-skill-delete.sh; do
-  src="$SRC/$f"
-  dst="$DEST/$f"
+# Map: src-relative-path → dest-filename (flat layout in ~/.claude/commands/)
+declare -a PAIRS=(
+  "commands/ex-skill.md|ex-skill.md"
+  "scripts/ex-skill-scan.sh|ex-skill-scan.sh"
+  "scripts/ex-skill-delete.sh|ex-skill-delete.sh"
+)
+
+for pair in "${PAIRS[@]}"; do
+  src_rel="${pair%%|*}"
+  dst_name="${pair##*|}"
+  src="$REPO_DIR/$src_rel"
+  dst="$DEST/$dst_name"
+
+  if [[ ! -f "$src" ]]; then
+    echo "  ✗ missing source: $src" >&2
+    exit 1
+  fi
 
   if [[ -e "$dst" || -L "$dst" ]]; then
-    echo "  ⚠ $f already exists — backing up to $f.bak"
+    echo "  ⚠ $dst_name already exists — backing up to $dst_name.bak"
     mv "$dst" "$dst.bak"
   fi
 
   if [[ "$MODE" == "link" ]]; then
     ln -s "$src" "$dst"
-    echo "  ✓ linked $f"
+    echo "  ✓ linked $dst_name"
   else
     cp "$src" "$dst"
-    echo "  ✓ copied $f"
+    echo "  ✓ copied $dst_name"
   fi
 done
 
